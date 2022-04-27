@@ -70,14 +70,35 @@ const char * mpd_tag_name(enum mpd_tag_type tag_type){
 }
 
 JsonNode * serialize_tag(const struct mpd_song *song, enum mpd_tag_type type){
-    JsonNode *result = json_mkarray();
-    unsigned i = 0;
     const char *value;
 
-    while ((value = mpd_song_get_tag(song, type, i++)) != NULL){
-        JsonNode *element = json_mkstring(value);
-        json_append_element(result, element);
-    }
+    if((value = mpd_song_get_tag(song, type, 0)) != NULL)
+        return json_mkstring(value);
+    else
+        return json_mknull();
+}
+
+JsonNode * serialize_song_tags_all(const struct mpd_song *song){
+    JsonNode *result = json_mkobject();
+    for (int i=0; i<MPD_TAG_COUNT; i++)
+        json_append_member(result, mpd_tag_name(i), serialize_tag(song, i));
+    return result;
+}
+
+JsonNode * serialize_song_tags_custom(const struct mpd_song *song){
+    JsonNode *result = json_mkobject();
+    json_append_member(result, mpd_tag_name(MPD_TAG_TITLE), serialize_tag(song, MPD_TAG_TITLE));
+    json_append_member(result, mpd_tag_name(MPD_TAG_ARTIST), serialize_tag(song, MPD_TAG_ARTIST));
+    json_append_member(result, mpd_tag_name(MPD_TAG_ALBUM), serialize_tag(song, MPD_TAG_ALBUM));
+    json_append_member(result, mpd_tag_name(MPD_TAG_ALBUM_ARTIST), serialize_tag(song, MPD_TAG_ALBUM_ARTIST));
+    json_append_member(result, mpd_tag_name(MPD_TAG_GENRE), serialize_tag(song, MPD_TAG_GENRE));
+    json_append_member(result, mpd_tag_name(MPD_TAG_DATE), serialize_tag(song, MPD_TAG_DATE));
+    json_append_member(result, mpd_tag_name(MPD_TAG_ORIGINAL_DATE), serialize_tag(song, MPD_TAG_ORIGINAL_DATE));
+
+    json_append_member(result, mpd_tag_name(MPD_TAG_MUSICBRAINZ_ARTISTID), serialize_tag(song, MPD_TAG_MUSICBRAINZ_ARTISTID));
+    json_append_member(result, mpd_tag_name(MPD_TAG_MUSICBRAINZ_ALBUMID), serialize_tag(song, MPD_TAG_MUSICBRAINZ_ALBUMID));
+    json_append_member(result, mpd_tag_name(MPD_TAG_MUSICBRAINZ_TRACKID), serialize_tag(song, MPD_TAG_MUSICBRAINZ_TRACKID));
+
     return result;
 }
 
@@ -86,9 +107,7 @@ JsonNode * serialize_song(const struct mpd_song *song){
     json_append_member(result, "id", json_mknumber((double) mpd_song_get_id(song)));
     json_append_member(result, "uri", json_mkstring(mpd_song_get_uri(song)));
     json_append_member(result, "duration", json_mknumber((double) mpd_song_get_duration(song)));
-    JsonNode *tags = json_mkobject();
-    for (int i=0; i<MPD_TAG_COUNT; i++)
-        json_append_member(tags, mpd_tag_name(i), serialize_tag(song, i));
+    JsonNode *tags = serialize_song_tags_custom(song);
     json_append_member(result, "tags", tags);
     return result;
 }
