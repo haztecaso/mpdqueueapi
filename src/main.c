@@ -138,8 +138,47 @@ JsonNode * get_queue_data(bool get_songs, bool get_songs_tags){
     return result;
 }
 
+struct cli_flags {
+    bool get_songs;
+    bool get_tags;
+    long long n_songs;
+};
+
+void print_usage(const char* progname){
+    printf("USAGE: %s [flags] [n_songs]", progname);
+    printf("FLAGS: (s)ongs (t)ags");
+}
+
+struct cli_flags* parse_args(int argc, char ** argv){
+    struct cli_flags* flags = malloc(sizeof(struct cli_flags));
+    flags->get_songs = false;
+    flags->get_tags  = false;
+    if(argc >= 2){
+        char* f = argv[1];
+        bool error = false;
+        while(*f){
+            if (*f == 's') flags->get_songs = true;
+            else if (*f == 'f') flags->get_tags = true;
+            else {
+                printf("ERROR: unknown flag '%c'.\n", *f);
+                error = true;
+            }
+            (void) *f++;
+        } 
+        if(error) exit(1);
+    }
+    if(argc >= 3){
+    }
+    if(argc >= 4){
+        print_usage(argv[0]);
+        exit(1);
+    }
+    return flags;
+}
+
 int main(int argc, char ** argv) {
-    JsonNode * queue_data = get_queue_data(true, true);
+    struct cli_flags* flags = parse_args(argc, argv);
+    JsonNode * queue_data = get_queue_data(flags->get_songs, flags->get_tags);
     char *tmp = json_stringify(queue_data, NULL);
     puts(tmp);
     free(tmp);
