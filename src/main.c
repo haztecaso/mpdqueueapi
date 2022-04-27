@@ -13,7 +13,6 @@
 
 static int handle_error(struct mpd_connection *c){
     assert(mpd_connection_get_error(c) != MPD_ERROR_SUCCESS);
-
     fprintf(stderr, "MPD ERROR: %s\n", mpd_connection_get_error_message(c));
     mpd_connection_free(c);
     return EXIT_FAILURE;
@@ -74,7 +73,7 @@ JsonNode * serialize_song(const struct mpd_song *song, bool get_tags){
         json_append_song_tag(tags, song, MPD_TAG_GENRE);
         json_append_song_tag(tags, song, MPD_TAG_DATE);
         json_append_song_tag(tags, song, MPD_TAG_ORIGINAL_DATE);
-        
+
         json_append_song_tag(tags, song, MPD_TAG_MUSICBRAINZ_ARTISTID);
         json_append_song_tag(tags, song, MPD_TAG_MUSICBRAINZ_ALBUMID);
         json_append_song_tag(tags, song, MPD_TAG_MUSICBRAINZ_TRACKID);
@@ -141,7 +140,7 @@ JsonNode * get_queue_data(bool get_songs, bool get_songs_tags){
 
 int main(int argc, char ** argv) {
     JsonNode * queue_data = get_queue_data(true, true);
-    char *tmp = json_stringify(queue_data, "  ");
+    char *tmp = json_stringify(queue_data, NULL);
     puts(tmp);
     free(tmp);
     return 0;
