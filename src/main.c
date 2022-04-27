@@ -71,44 +71,49 @@ const char * mpd_tag_name(enum mpd_tag_type tag_type){
 
 JsonNode * serialize_tag(const struct mpd_song *song, enum mpd_tag_type type){
     const char *value;
-
     if((value = mpd_song_get_tag(song, type, 0)) != NULL)
         return json_mkstring(value);
     else
         return json_mknull();
 }
 
+void json_append_song_tag(JsonNode *object, const struct mpd_song *song, enum mpd_tag_type tag_type){
+    json_append_member(object, mpd_tag_name(tag_type), serialize_tag(song, tag_type));
+}
+
 JsonNode * serialize_song_tags_all(const struct mpd_song *song){
     JsonNode *result = json_mkobject();
     for (int i=0; i<MPD_TAG_COUNT; i++)
-        json_append_member(result, mpd_tag_name(i), serialize_tag(song, i));
+        json_append_song_tag(result, song, i);
     return result;
 }
 
 JsonNode * serialize_song_tags_custom(const struct mpd_song *song){
     JsonNode *result = json_mkobject();
-    json_append_member(result, mpd_tag_name(MPD_TAG_TITLE), serialize_tag(song, MPD_TAG_TITLE));
-    json_append_member(result, mpd_tag_name(MPD_TAG_ARTIST), serialize_tag(song, MPD_TAG_ARTIST));
-    json_append_member(result, mpd_tag_name(MPD_TAG_ALBUM), serialize_tag(song, MPD_TAG_ALBUM));
-    json_append_member(result, mpd_tag_name(MPD_TAG_ALBUM_ARTIST), serialize_tag(song, MPD_TAG_ALBUM_ARTIST));
-    json_append_member(result, mpd_tag_name(MPD_TAG_GENRE), serialize_tag(song, MPD_TAG_GENRE));
-    json_append_member(result, mpd_tag_name(MPD_TAG_DATE), serialize_tag(song, MPD_TAG_DATE));
-    json_append_member(result, mpd_tag_name(MPD_TAG_ORIGINAL_DATE), serialize_tag(song, MPD_TAG_ORIGINAL_DATE));
+    json_append_song_tag(result, song, MPD_TAG_TITLE);
+    json_append_song_tag(result, song, MPD_TAG_ARTIST);
+    json_append_song_tag(result, song, MPD_TAG_ALBUM);
+    json_append_song_tag(result, song, MPD_TAG_ALBUM_ARTIST);
+    json_append_song_tag(result, song, MPD_TAG_GENRE);
+    json_append_song_tag(result, song, MPD_TAG_DATE);
+    json_append_song_tag(result, song, MPD_TAG_ORIGINAL_DATE);
 
-    json_append_member(result, mpd_tag_name(MPD_TAG_MUSICBRAINZ_ARTISTID), serialize_tag(song, MPD_TAG_MUSICBRAINZ_ARTISTID));
-    json_append_member(result, mpd_tag_name(MPD_TAG_MUSICBRAINZ_ALBUMID), serialize_tag(song, MPD_TAG_MUSICBRAINZ_ALBUMID));
-    json_append_member(result, mpd_tag_name(MPD_TAG_MUSICBRAINZ_TRACKID), serialize_tag(song, MPD_TAG_MUSICBRAINZ_TRACKID));
+    json_append_song_tag(result, song, MPD_TAG_MUSICBRAINZ_ARTISTID);
+    json_append_song_tag(result, song, MPD_TAG_MUSICBRAINZ_ALBUMID);
+    json_append_song_tag(result, song, MPD_TAG_MUSICBRAINZ_TRACKID);
 
     return result;
 }
 
-JsonNode * serialize_song(const struct mpd_song *song){
+JsonNode * serialize_song(const struct mpd_song *song, bool get_tags){
     JsonNode *result = json_mkobject();
     json_append_member(result, "id", json_mknumber((double) mpd_song_get_id(song)));
     json_append_member(result, "uri", json_mkstring(mpd_song_get_uri(song)));
     json_append_member(result, "duration", json_mknumber((double) mpd_song_get_duration(song)));
-    JsonNode *tags = serialize_song_tags_custom(song);
-    json_append_member(result, "tags", tags);
+    if(get_tags){
+        JsonNode *tags = serialize_song_tags_custom(song);
+        json_append_member(result, "tags", tags);
+    }
     return result;
 }
 
@@ -134,7 +139,7 @@ JsonNode * get_queue_info(struct mpd_connection *conn){
     return result;
 }
 
-JsonNode * get_queue_songs(struct mpd_connection *conn){
+JsonNode * get_queue_songs(struct mpd_connection *conn, bool get_tags){
     mpd_command_list_begin(conn, true);
     mpd_send_list_queue_meta(conn);
     mpd_command_list_end(conn);
@@ -142,7 +147,7 @@ JsonNode * get_queue_songs(struct mpd_connection *conn){
     JsonNode *result = json_mkarray();
     struct mpd_song *song;
     while ((song = mpd_recv_song(conn)) != NULL){
-        json_append_element(result, serialize_song(song));
+        json_append_element(result, serialize_song(song, get_tags));
         mpd_song_free(song);
     }
 
@@ -152,15 +157,15 @@ JsonNode * get_queue_songs(struct mpd_connection *conn){
     return result;
 }
 
-JsonNode * get_queue_data(bool song){
+JsonNode * get_queue_data(bool get_songs, bool get_songs_tags){
     struct mpd_connection *conn;
     conn = mpd_connection_new(NULL, 0, 30000);
     if (mpd_connection_get_error(conn) != MPD_ERROR_SUCCESS)
         exit(handle_error(conn));
 
     JsonNode *result = get_queue_info(conn);
-    if(song){
-        JsonNode *songs = get_queue_songs(conn);
+    if(get_songs){
+        JsonNode *songs = get_queue_songs(conn, get_songs_tags);
         json_append_member(result, "songs", songs);
     }
     mpd_connection_free(conn);
@@ -198,7 +203,7 @@ int main_cgi(int argc, char ** argv) {
         fgets(input, len+1, stdin);
         unencode(input+EXTRA, input+len, data);
         printf("Content-Type: application/json;charset=utf-8\n\n");
-        JsonNode * queue_data = get_queue_data(false);
+        JsonNode * queue_data = get_queue_data(true, true);
         char *tmp = json_stringify(queue_data, "  ");
         puts(tmp);
         free(tmp);
@@ -208,7 +213,7 @@ int main_cgi(int argc, char ** argv) {
 }
 
 int main(int argc, char ** argv) {
-    JsonNode * queue_data = get_queue_data(true);
+    JsonNode * queue_data = get_queue_data(true, false);
     char *tmp = json_stringify(queue_data, "  ");
     puts(tmp);
     free(tmp);
