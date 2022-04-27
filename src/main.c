@@ -1,9 +1,4 @@
 #include <mpd/client.h>
-#include <mpd/status.h>
-#include <mpd/entity.h>
-#include <mpd/search.h>
-#include <mpd/tag.h>
-#include <mpd/message.h>
 
 #include <assert.h>
 #include <stdio.h>
@@ -11,7 +6,6 @@
 #include <stdlib.h>
 
 #include "./json.h"
-#include "mpd/albumart.h"
 
 #define MAXLEN 80
 #define EXTRA 5
@@ -35,37 +29,21 @@ const char * mpd_tag_name(enum mpd_tag_type tag_type){
         case MPD_TAG_NAME: return "name";
         case MPD_TAG_GENRE: return "genre";
         case MPD_TAG_DATE: return "date";
+        case MPD_TAG_ORIGINAL_DATE: return "original_date";
         case MPD_TAG_COMPOSER: return "composer";
         case MPD_TAG_PERFORMER: return "performer";
         case MPD_TAG_COMMENT: return "comment";
         case MPD_TAG_DISC: return "disc";
+        case MPD_TAG_LABEL: return "label";
 
         case MPD_TAG_MUSICBRAINZ_ARTISTID: return "musicbrainz_artistid";
         case MPD_TAG_MUSICBRAINZ_ALBUMID: return "musicbrainz_albumid";
         case MPD_TAG_MUSICBRAINZ_ALBUMARTISTID: return "musicbrainz_albumartistid";
         case MPD_TAG_MUSICBRAINZ_TRACKID: return "musicbrainz_trackid";
         case MPD_TAG_MUSICBRAINZ_RELEASETRACKID: return "musicbrainz_releasetrackid";
-
-        case MPD_TAG_ORIGINAL_DATE: return "original_date";
-
-        case MPD_TAG_ARTIST_SORT: return "artist_sort";
-        case MPD_TAG_ALBUM_ARTIST_SORT: return "album_artist_sort";
-
-        case MPD_TAG_ALBUM_SORT: return "album_sort";
-        case MPD_TAG_LABEL: return "label";
         case MPD_TAG_MUSICBRAINZ_WORKID: return "musicbrainz_workid";
 
-        case MPD_TAG_GROUPING: return "grouping";
-        case MPD_TAG_WORK: return "work";
-        case MPD_TAG_CONDUCTOR: return "conductor";
-
-        case MPD_TAG_COMPOSER_SORT: return "composer_sort";
-        case MPD_TAG_ENSEMBLE: return "ensemble";
-        case MPD_TAG_MOVEMENT: return "movement";
-        case MPD_TAG_MOVEMENTNUMBER: return "movementnumber";
-        case MPD_TAG_LOCATION: return "location";
-
-        default: return "unknown";
+        default: return "";
     }
 }
 
@@ -81,37 +59,26 @@ void json_append_song_tag(JsonNode *object, const struct mpd_song *song, enum mp
     json_append_member(object, mpd_tag_name(tag_type), serialize_tag(song, tag_type));
 }
 
-JsonNode * serialize_song_tags_all(const struct mpd_song *song){
-    JsonNode *result = json_mkobject();
-    for (int i=0; i<MPD_TAG_COUNT; i++)
-        json_append_song_tag(result, song, i);
-    return result;
-}
-
-JsonNode * serialize_song_tags_custom(const struct mpd_song *song){
-    JsonNode *result = json_mkobject();
-    json_append_song_tag(result, song, MPD_TAG_TITLE);
-    json_append_song_tag(result, song, MPD_TAG_ARTIST);
-    json_append_song_tag(result, song, MPD_TAG_ALBUM);
-    json_append_song_tag(result, song, MPD_TAG_ALBUM_ARTIST);
-    json_append_song_tag(result, song, MPD_TAG_GENRE);
-    json_append_song_tag(result, song, MPD_TAG_DATE);
-    json_append_song_tag(result, song, MPD_TAG_ORIGINAL_DATE);
-
-    json_append_song_tag(result, song, MPD_TAG_MUSICBRAINZ_ARTISTID);
-    json_append_song_tag(result, song, MPD_TAG_MUSICBRAINZ_ALBUMID);
-    json_append_song_tag(result, song, MPD_TAG_MUSICBRAINZ_TRACKID);
-
-    return result;
-}
-
 JsonNode * serialize_song(const struct mpd_song *song, bool get_tags){
     JsonNode *result = json_mkobject();
     json_append_member(result, "id", json_mknumber((double) mpd_song_get_id(song)));
     json_append_member(result, "uri", json_mkstring(mpd_song_get_uri(song)));
     json_append_member(result, "duration", json_mknumber((double) mpd_song_get_duration(song)));
     if(get_tags){
-        JsonNode *tags = serialize_song_tags_custom(song);
+        JsonNode *tags = json_mkobject();
+
+        json_append_song_tag(tags, song, MPD_TAG_TITLE);
+        json_append_song_tag(tags, song, MPD_TAG_ARTIST);
+        json_append_song_tag(tags, song, MPD_TAG_ALBUM);
+        json_append_song_tag(tags, song, MPD_TAG_ALBUM_ARTIST);
+        json_append_song_tag(tags, song, MPD_TAG_GENRE);
+        json_append_song_tag(tags, song, MPD_TAG_DATE);
+        json_append_song_tag(tags, song, MPD_TAG_ORIGINAL_DATE);
+        
+        json_append_song_tag(tags, song, MPD_TAG_MUSICBRAINZ_ARTISTID);
+        json_append_song_tag(tags, song, MPD_TAG_MUSICBRAINZ_ALBUMID);
+        json_append_song_tag(tags, song, MPD_TAG_MUSICBRAINZ_TRACKID);
+
         json_append_member(result, "tags", tags);
     }
     return result;
@@ -213,7 +180,7 @@ int main_cgi(int argc, char ** argv) {
 }
 
 int main(int argc, char ** argv) {
-    JsonNode * queue_data = get_queue_data(true, false);
+    JsonNode * queue_data = get_queue_data(true, true);
     char *tmp = json_stringify(queue_data, "  ");
     puts(tmp);
     free(tmp);
