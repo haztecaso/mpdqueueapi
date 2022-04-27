@@ -7,15 +7,17 @@
 
 #include "./json.h"
 
-#define MAXLEN 80
-#define EXTRA 5
-#define MAXINPUT MAXLEN+EXTRA+2
-
-static int handle_error(struct mpd_connection *c){
-    assert(mpd_connection_get_error(c) != MPD_ERROR_SUCCESS);
-    fprintf(stderr, "MPD ERROR: %s\n", mpd_connection_get_error_message(c));
-    mpd_connection_free(c);
+static int handle_error(struct mpd_connection *conn){
+    assert(mpd_connection_get_error(conn) != MPD_ERROR_SUCCESS);
+    fprintf(stderr, "MPD ERROR: %s\n", mpd_connection_get_error_message(conn));
+    mpd_connection_free(conn);
     return EXIT_FAILURE;
+}
+
+void response_next_no_errors(struct mpd_connection *conn){
+    mpd_response_next(conn);
+    if (mpd_connection_get_error(conn) != MPD_ERROR_SUCCESS || !mpd_response_finish(conn))
+        exit(handle_error(conn));
 }
 
 const char * mpd_tag_name(enum mpd_tag_type tag_type){
@@ -46,22 +48,19 @@ const char * mpd_tag_name(enum mpd_tag_type tag_type){
     }
 }
 
-JsonNode * serialize_tag(const struct mpd_song *song, enum mpd_tag_type type){
-    const char *value;
-    if((value = mpd_song_get_tag(song, type, 0)) != NULL)
-        return json_mkstring(value);
-    else
-        return json_mknull();
-}
-
 void json_append_song_tag(JsonNode *object, const struct mpd_song *song, enum mpd_tag_type tag_type){
-    json_append_member(object, mpd_tag_name(tag_type), serialize_tag(song, tag_type));
+    JsonNode *value;
+    const char *str;
+    if((str = mpd_song_get_tag(song, tag_type, 0)) != NULL)
+        value = json_mkstring(str);
+    else
+        value = json_mknull();
+    json_append_member(object, mpd_tag_name(tag_type), value);
 }
 
 JsonNode * serialize_song(const struct mpd_song *song, bool get_tags){
     JsonNode *result = json_mkobject();
-    json_append_member(result, "id", json_mknumber((double) mpd_song_get_id(song)));
-    json_append_member(result, "uri", json_mkstring(mpd_song_get_uri(song)));
+    // json_append_member(result, "uri", json_mkstring(mpd_song_get_uri(song)));
     json_append_member(result, "duration", json_mknumber((double) mpd_song_get_duration(song)));
     if(get_tags){
         JsonNode *tags = json_mkobject();
@@ -83,27 +82,6 @@ JsonNode * serialize_song(const struct mpd_song *song, bool get_tags){
     return result;
 }
 
-JsonNode * get_queue_info(struct mpd_connection *conn){
-    mpd_command_list_begin(conn, true);
-    mpd_send_status(conn);
-    mpd_command_list_end(conn);
-
-    struct mpd_status * status = mpd_recv_status(conn);
-    if (status == NULL) exit(handle_error(conn));
-
-    JsonNode *result = json_mkobject();
-    json_append_member(result, "version", json_mknumber((double) mpd_status_get_queue_version(status)));
-    json_append_member(result, "length", json_mknumber((double) mpd_status_get_queue_length(status)));
-    json_append_member(result, "position", json_mknumber((double) mpd_status_get_song_pos(status)));
-    json_append_member(result, "current_id", json_mknumber((double) mpd_status_get_song_id(status)));
-    json_append_member(result, "next_id", json_mknumber((double) mpd_status_get_next_song_id(status)));
-    mpd_status_free(status);
-
-    mpd_response_next(conn);
-    if (mpd_connection_get_error(conn) != MPD_ERROR_SUCCESS || !mpd_response_finish(conn))
-        exit(handle_error(conn));
-    return result;
-}
 
 JsonNode * get_queue_songs(struct mpd_connection *conn, bool get_tags){
     mpd_command_list_begin(conn, true);
@@ -123,64 +101,59 @@ JsonNode * get_queue_songs(struct mpd_connection *conn, bool get_tags){
     return result;
 }
 
-JsonNode * get_queue_data(bool get_songs, bool get_songs_tags){
-    struct mpd_connection *conn;
-    conn = mpd_connection_new(NULL, 0, 30000);
+int main(void) {
+    // Parameters
+    const int N_SONGS = 7;
+
+    // mpd connection setup
+    struct mpd_connection *conn = mpd_connection_new(NULL, 0, 30000);
     if (mpd_connection_get_error(conn) != MPD_ERROR_SUCCESS)
         exit(handle_error(conn));
 
-    JsonNode *result = get_queue_info(conn);
-    if(get_songs){
-        JsonNode *songs = get_queue_songs(conn, get_songs_tags);
-        json_append_member(result, "songs", songs);
+    // mpd command list: get mpd status
+    mpd_command_list_begin(conn, true);
+    mpd_send_status(conn);
+    mpd_command_list_end(conn);
+
+    JsonNode * data = json_mkobject();
+
+    struct mpd_status * status = mpd_recv_status(conn);
+    if (status == NULL) exit(handle_error(conn));
+
+    const unsigned int queue_version    = mpd_status_get_queue_version(status);
+    const unsigned int queue_length     = mpd_status_get_queue_length(status);
+    const unsigned int song_pos         = mpd_status_get_song_pos(status);
+    const unsigned int next_song_pos    = mpd_status_get_next_song_pos(status);
+    mpd_status_free(status);
+
+    json_append_member(data, "queue_version", json_mknumber((double) queue_version));
+    json_append_member(data, "queue_length",  json_mknumber((double) queue_length));
+    json_append_member(data, "song_pos",      json_mknumber((double) song_pos));
+    json_append_member(data, "next_song_pos", json_mknumber((double) next_song_pos));
+
+    response_next_no_errors(conn);
+
+    const unsigned int end_pos = song_pos + N_SONGS;
+
+    mpd_command_list_begin(conn, true);
+    mpd_send_list_queue_range_meta(conn, song_pos, end_pos);
+    mpd_command_list_end(conn);
+
+    JsonNode *songs = json_mkarray();
+    struct mpd_song *song;
+    while ((song = mpd_recv_song(conn)) != NULL){
+        json_append_element(songs, serialize_song(song, true));
+        mpd_song_free(song);
     }
+
+    response_next_no_errors(conn);
+    json_append_member(data, "songs", songs);
+
+    // mpd connection closing
     mpd_connection_free(conn);
-    return result;
-}
 
-struct cli_flags {
-    bool get_songs;
-    bool get_tags;
-    long long n_songs;
-};
-
-void print_usage(const char* progname){
-    printf("USAGE: %s [flags] [n_songs]", progname);
-    printf("FLAGS: (s)ongs (t)ags");
-}
-
-struct cli_flags* parse_args(int argc, char ** argv){
-    struct cli_flags* flags = malloc(sizeof(struct cli_flags));
-    flags->get_songs = false;
-    flags->get_tags  = false;
-    if(argc >= 2){
-        char* f = argv[1];
-        bool error = false;
-        while(*f){
-            if (*f == 's') flags->get_songs = true;
-            else if (*f == 'f') flags->get_tags = true;
-            else {
-                printf("ERROR: unknown flag '%c'.\n", *f);
-                error = true;
-            }
-            (void) *f++;
-        } 
-        if(error) exit(1);
-    }
-    if(argc >= 3){
-    }
-    if(argc >= 4){
-        print_usage(argv[0]);
-        exit(1);
-    }
-    return flags;
-}
-
-int main(int argc, char ** argv) {
-    struct cli_flags* flags = parse_args(argc, argv);
-    JsonNode * queue_data = get_queue_data(flags->get_songs, flags->get_tags);
-    char *tmp = json_stringify(queue_data, NULL);
-    puts(tmp);
-    free(tmp);
+    char *data_str = json_stringify(data, NULL);
+    puts(data_str);
+    free(data_str);
     return 0;
 }
