@@ -51,7 +51,7 @@
         };
 
         devShell = pkgs.mkShell {
-          nativeBuildInputs = with pkgs; [ libmpdclient mpdqueueapi mpc_cli ];
+          nativeBuildInputs = with pkgs; [ libmpdclient mpdqueueapi mpc_cli jq fx ];
         };
       });
 }
