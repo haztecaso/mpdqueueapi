@@ -1,5 +1,5 @@
 {
-  description = "MPD html stats";
+  description = "MPD queue api";
 
   inputs = {
     nixpkgs.url = "github:nixos/nixpkgs/nixpkgs-unstable";

@@ -1,7 +1,7 @@
-CFLAGS = -O3 -lmpdclient -Wall
+CFLAGS = -O3 -lmpdclient
 
 all:
-	gcc -o mpdqueueapi main.c ./json.c $(CFLAGS)
+	gcc -o mpdqueueapi ./src/main.c src/json.c $(CFLAGS)
 
 clean:
 	rm -f prog *.o
