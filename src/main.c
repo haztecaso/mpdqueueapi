@@ -139,46 +139,6 @@ JsonNode * get_queue_data(bool get_songs, bool get_songs_tags){
     return result;
 }
 
-void unencode(char *src, char *last, char *dest)
-{
-    for(; src != last; src++, dest++)
-        if(*src == '+')
-            *dest = ' ';
-        else if(*src == '%') {
-            int code;
-            if(sscanf(src+1, "%2x", &code) != 1) code = '?';
-            *dest = code;
-            src +=2; }     
-        else
-            *dest = *src;
-    *dest = '\n';
-    *++dest = '\0';
-}
-
-
-int main_cgi(int argc, char ** argv) {
-    char *lenstr;
-    char input[MAXINPUT], data[MAXINPUT];
-    long len;
-    lenstr = getenv("CONTENT_LENGTH");
-
-    if(lenstr == NULL || sscanf(lenstr,"%ld",&len)!=1 || len > MAXLEN){
-        printf("Content-Type:text/plain;charset=utf-8\n");
-        printf("Status: 400 Bad Request\n\n");
-    }
-    else {
-        fgets(input, len+1, stdin);
-        unencode(input+EXTRA, input+len, data);
-        printf("Content-Type: application/json;charset=utf-8\n\n");
-        JsonNode * queue_data = get_queue_data(true, true);
-        char *tmp = json_stringify(queue_data, "  ");
-        puts(tmp);
-        free(tmp);
-    }
-
-    return 0;
-}
-
 int main(int argc, char ** argv) {
     JsonNode * queue_data = get_queue_data(true, true);
     char *tmp = json_stringify(queue_data, "  ");
