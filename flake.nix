@@ -4,20 +4,6 @@
   inputs = {
     nixpkgs.url = "github:nixos/nixpkgs/nixpkgs-unstable";
     utils.url = "github:numtide/flake-utils";
-
-    neovim = {
-      url = "github:neovim/neovim?dir=contrib";
-      inputs.nixpkgs.follows = "nixpkgs";
-    };
-
-    rnix-lsp = {
-      url = "github:nix-community/rnix-lsp";
-      inputs.nixpkgs.follows = "nixpkgs";
-    };
-
-    # Vim plugins
-    nvim-which-key = { url = "github:folke/which-key.nvim"; flake = false; };
-
   };
 
   outputs = { self, nixpkgs, utils, neovim, ... }@inputs:
