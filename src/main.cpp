@@ -5,7 +5,7 @@
 #include <string.h>
 #include <stdlib.h>
 
-#include "./json.h"
+#include "./json.hpp"
 
 static int handle_error(struct mpd_connection *conn){
     assert(mpd_connection_get_error(conn) != MPD_ERROR_SUCCESS);
