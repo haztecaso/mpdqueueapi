@@ -9,12 +9,13 @@
   outputs = { self, nixpkgs, utils, ... }@inputs:
     let
       version = "0.1.0";
-      pkg = { lib , stdenv , libmpdclient, websocketpp }: with lib; stdenv.mkDerivation rec {
+      pkg = { lib, stdenv, cmake, boost, libmpdclient, websocketpp, pkg-config }: with lib; stdenv.mkDerivation rec {
         inherit version;
         pname = "mpdqueueapi";
         src = ./.;
         enableParallelBuilding = true;
-        buildInputs = [ libmpdclient ];
+        buildInputs = [ boost libmpdclient websocketpp ];
+        nativeBuildInputs = [ pkg-config cmake ];
       
         installPhase = ''
           mkdir -p $out/bin                                                                             
@@ -55,6 +56,8 @@
 
         devShell = pkgs.mkShell {
           nativeBuildInputs = with pkgs; [
+            pkg-config
+            boost
             websocketpp
             libmpdclient
             mpdqueueapi
