@@ -1,12 +1,16 @@
-/* #include <websocketpp/config/asio_no_tls.hpp> */
-/* #include <websocketpp/server.hpp> */
-/* #include <iostream> */
+#define ASIO_STANDALONE
+
+#include <websocketpp/config/asio_no_tls.hpp>
+#include <websocketpp/server.hpp>
+#include <iostream>
+
 
 #include <mpd/client.h>
 
 #include <assert.h>
 #include <stdio.h>
 #include <string.h>
+#include <signal.h>
 #include <stdlib.h>
 
 #include "./json.hpp"
@@ -105,7 +109,7 @@ JsonNode * get_queue_songs(struct mpd_connection *conn, bool get_tags){
     return result;
 }
 
-int main(void) {
+char * queue(void) {
     // Parameters
     const int N_SONGS = 7;
 
@@ -157,7 +161,79 @@ int main(void) {
     mpd_connection_free(conn);
 
     char *data_str = json_stringify(data, NULL);
-    puts(data_str);
-    free(data_str);
+    return data_str;
+}
+
+typedef websocketpp::server<websocketpp::config::asio> server;
+
+using websocketpp::lib::placeholders::_1;
+using websocketpp::lib::placeholders::_2;
+using websocketpp::lib::bind;
+
+// pull out the type of messages sent by our config
+typedef server::message_ptr message_ptr;
+
+// Define a callback to handle incoming messages
+void on_message(server* s, websocketpp::connection_hdl hdl, message_ptr msg) {
+    std::cout << "received message '" << msg->get_payload() << "'" << std::endl;
+    std::cout << "with header '" << msg->get_header() << "'" << std::endl;
+
+
+    if (msg->get_payload().rfind("queue", 0) == 0) {
+        try {
+            s->send(hdl, queue(), msg->get_opcode());
+        } catch (websocketpp::exception const & e) {
+            std::cout << "Echo failed because: " << "(" << e.what() << ")" << std::endl;
+        }
+        return;
+    } else if (msg->get_payload() == "stop-listening" || msg->get_payload() == "stop") {
+        s->stop_listening();
+        return;
+    }
+}
+
+server ws;
+
+void handler_close(int s){
+    ws.stop_listening();
+    exit(1); 
+}
+
+
+int main() {
+    // Create a server endpoint
+    //
+    struct sigaction sigIntHandler;
+
+    sigIntHandler.sa_handler = handler_close;
+    sigemptyset(&sigIntHandler.sa_mask);
+    sigIntHandler.sa_flags = 0;
+
+    sigaction(SIGINT, &sigIntHandler, NULL);
+
+    try {
+        // Set logging settings
+        // ws.set_access_channels(websocketpp::log::alevel::all);
+        // ws.clear_access_channels(websocketpp::log::alevel::frame_payload);
+
+        // Initialize Asio
+        ws.init_asio();
+
+        // Register our message handler
+        ws.set_message_handler(bind(&on_message,&ws,::_1,::_2));
+
+        // Listen on port 9000
+        ws.listen(8000);
+
+        // Start the server accept loop
+        ws.start_accept();
+
+        // Start the ASIO io_service run loop
+        ws.run();
+    } catch (websocketpp::exception const & e) {
+        std::cout << e.what() << std::endl;
+    } catch (...) {
+        std::cout << "other exception" << std::endl;
+    }
     return 0;
 }
