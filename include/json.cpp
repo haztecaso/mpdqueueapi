@@ -21,7 +21,7 @@
   THE SOFTWARE.
 */
 
-#include "json.h"
+#include "json.hpp"
 
 #include <assert.h>
 #include <stdint.h>

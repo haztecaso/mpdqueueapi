@@ -1,0 +1,28 @@
+<!DOCTYPE html>
+<html lang="en">
+    <head>
+        <title></title>
+        <meta charset="UTF-8">
+        <meta name="viewport" content="width=device-width, initial-scale=1">
+        <script>
+            let ws = new WebSocket("ws://localhost:8000/ws"); // create new connection
+
+            ws.onerror = function (error) {
+                            console.log("WebSocket Error " + error);
+                        };
+
+
+            ws.onmessage = function (e) {
+                            const data = JSON.parse(e.data);
+                            const s = data.songs[0].tags;
+                            document.getElementById("current").innerHTML = `${s.artist} - ${s.title}`;
+                        };
+
+        </script>
+    </head>
+    <body>
+        <button onclick="ws.send('queue')">get current song</button>
+        <button onclick="ws.send('stop')">close ws</button>
+        <p id="current"></p>
+    </body>
+</html>
