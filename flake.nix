@@ -34,6 +34,44 @@
       overlay = final: prev: rec {
         mpdws = final.callPackage pkg {};
       };
+      nixosModule = { config, lib, pkgs, ... }: let
+        cfg = config.services.mpdws;
+      in {
+        options.services.mpdws = with lib; {
+          enable = mkEnableOption "Enable mpdws, the MPD WebSocket API.";
+          host = mkOption  {
+              type = types.str;
+              default = "127.0.0.1";
+              description = "Listen address.";
+          };
+          port = mkOption {
+              type = types.port;
+              default = 9001;
+              description = "Listen port.";
+          };
+          mpdHost = mkOption {
+            type = types.str;
+            default = "127.0.0.1";
+            description = "MPD host.";
+          };
+          mpdPort = mkOption {
+            type = types.port;
+            default = 6600;
+            description = "MPD host.";
+          };
+        };
+        config = lib.mkIf cfg.enable {
+          systemd.services.mpdws = {
+            after = [ "network.target" ];
+            description = "MPD WebSocket API";
+            wantedBy = "multi-user.target";
+            serviceConfig = {
+              ExecStart = "${pkgs.mpdws}/bin/mpdws --host=${cfg.host} --port=${toString cfg.port} --mpd-host=${cfg.mpdHost} --mpd-port=${cfg.mpdPort}";
+              Restart = "always";
+            };
+          };
+        }; 
+      };
     } // utils.lib.eachDefaultSystem (system:
       let
         pkgs = import nixpkgs { inherit system; overlays = [ self.overlay ]; };
@@ -44,45 +82,6 @@
         };
 
         defaultPackage = packages.mpdws;
-
-        nixosModule = { config, lib, pkgs, ... }: let
-          cfg = config.services.mpdws;
-        in {
-          options.services.mpdws = with lib; {
-            enable = mkEnableOption "Enable mpdws, the MPD WebSocket API.";
-            host = mkOption  {
-                type = types.str;
-                default = "127.0.0.1";
-                description = "Listen address.";
-            };
-            port = mkOption {
-                type = types.port;
-                default = 9001;
-                description = "Listen port.";
-            };
-            mpdHost = mkOption {
-              type = types.str;
-              default = "127.0.0.1";
-              description = "MPD host.";
-            };
-            mpdPort = mkOption {
-              type = types.port;
-              default = 6600;
-              description = "MPD host.";
-            };
-          };
-          config = lib.mkIf cfg.enable {
-            systemd.services.mpdws = {
-              after = [ "network.target" ];
-              description = "MPD WebSocket API";
-              wantedBy = "multi-user.target";
-              serviceConfig = {
-                ExecStart = "${pkgs.mpdws}/bin/mpdws --host=${cfg.host} --port=${toString cfg.port} --mpd-host=${cfg.mpdHost} --mpd-port=${cfg.mpdPort}";
-                Restart = "always";
-              };
-            };
-          }; 
-        };
 
         apps = {
           mpdws = {
