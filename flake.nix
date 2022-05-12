@@ -64,7 +64,7 @@
           systemd.services.mpdws = {
             after = [ "network.target" ];
             description = "MPD WebSocket API";
-            wantedBy = "multi-user.target";
+            wantedBy = [ "multi-user.target" ];
             serviceConfig = {
               ExecStart = "${pkgs.mpdws}/bin/mpdws --host=${cfg.host} --port=${toString cfg.port} --mpd-host=${cfg.mpdHost} --mpd-port=${toString cfg.mpdPort}";
               Restart = "always";
