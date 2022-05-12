@@ -5,16 +5,20 @@
         <meta charset="UTF-8">
         <meta name="viewport" content="width=device-width, initial-scale=1">
         <script>
-            let ws = new WebSocket("ws://localhost:8000/ws"); // create new connection
+            let ws = new WebSocket("ws://localhost:8001/ws"); // create new connection
 
             ws.onerror = function (error) {
                             console.log("WebSocket Error " + error);
                         };
 
+            ws.onclose = function(e) {
+                            console.log("Connection closed!");
+                        }
 
             ws.onmessage = function (e) {
                             const data = JSON.parse(e.data);
                             const s = data.songs[0].tags;
+                            console.log(s);
                             document.getElementById("current").innerHTML = `${s.artist} - ${s.title}`;
                         };
 
