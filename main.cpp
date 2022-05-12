@@ -1,9 +1,11 @@
+#include <cstdlib>
 #define ASIO_STANDALONE
 
 #include <websocketpp/config/asio_no_tls.hpp>
 #include <websocketpp/server.hpp>
 #include <iostream>
-
+#include "docopt.h"
+/* #include <cstdlib> */
 
 #include <mpd/client.h>
 
@@ -13,13 +15,55 @@
 #include <signal.h>
 #include <stdlib.h>
 
-#include "./json.hpp"
+#include "json.hpp"
+
+static const char USAGE[] =
+R"(MPD WebSocket API
+
+    Usage:
+      mpdws [options]
+
+    Options:
+      -h --help          Show this screen.
+      -v --verbose       Enable verbose mode.
+      --host=<ADDR>      Listen host[default: 127.0.0.1]
+      --port=<INT>       Listen port[default: 9001]
+      --mpd-host=<ADDR>  Listen host[default: 127.0.0.1]
+      --mpd-port=<INT>   Listen port[default: 6600]
+)";
+
+struct Config {
+    bool verbose = false;
+    std::string host;
+    long port;
+    std::string mpd_host;
+    long mpd_port;
+};
+
+struct Config cfg;
+
+struct Config parse_args(int argc, const char** argv){
+    struct Config result;
+    std::map<std::string, docopt::value> args = docopt::docopt(USAGE, { argv + 1, argv + argc }, true, "MPD WebSocket API");
+    try {
+        result.host = args["--host"].asString();
+        result.mpd_host = args["--mpd-host"].asString();
+        result.verbose = args["--verbose"].asBool();
+        result.port = args["--port"].asLong();
+        result.mpd_port = args["--mpd-port"].asLong();
+    } catch(std::invalid_argument) {
+        std::cerr << "Invalid port!" << std::endl;
+        exit(EXIT_FAILURE);
+    }
+
+    return result;
+}
 
 static int handle_error(struct mpd_connection *conn){
     assert(mpd_connection_get_error(conn) != MPD_ERROR_SUCCESS);
     fprintf(stderr, "MPD ERROR: %s\n", mpd_connection_get_error_message(conn));
     mpd_connection_free(conn);
-    return EXIT_FAILURE;
+   return EXIT_FAILURE;
 }
 
 void response_next_no_errors(struct mpd_connection *conn){
@@ -30,27 +74,27 @@ void response_next_no_errors(struct mpd_connection *conn){
 
 const char * mpd_tag_name(enum mpd_tag_type tag_type){
     switch (tag_type) {
-        case MPD_TAG_ARTIST: return "artist";
-        case MPD_TAG_ALBUM: return "album";
-        case MPD_TAG_ALBUM_ARTIST: return "album_artist";
-        case MPD_TAG_TITLE: return "title";
-        case MPD_TAG_TRACK: return "track";
-        case MPD_TAG_NAME: return "name";
-        case MPD_TAG_GENRE: return "genre";
-        case MPD_TAG_DATE: return "date";
-        case MPD_TAG_ORIGINAL_DATE: return "original_date";
-        case MPD_TAG_COMPOSER: return "composer";
-        case MPD_TAG_PERFORMER: return "performer";
-        case MPD_TAG_COMMENT: return "comment";
-        case MPD_TAG_DISC: return "disc";
-        case MPD_TAG_LABEL: return "label";
+        case MPD_TAG_ARTIST:                     return "artist";
+        case MPD_TAG_ALBUM:                      return "album";
+        case MPD_TAG_ALBUM_ARTIST:               return "album_artist";
+        case MPD_TAG_TITLE:                      return "title";
+        case MPD_TAG_TRACK:                      return "track";
+        case MPD_TAG_NAME:                       return "name";
+        case MPD_TAG_GENRE:                      return "genre";
+        case MPD_TAG_DATE:                       return "date";
+        case MPD_TAG_ORIGINAL_DATE:              return "original_date";
+        case MPD_TAG_COMPOSER:                   return "composer";
+        case MPD_TAG_PERFORMER:                  return "performer";
+        case MPD_TAG_COMMENT:                    return "comment";
+        case MPD_TAG_DISC:                       return "disc";
+        case MPD_TAG_LABEL:                      return "label";
 
-        case MPD_TAG_MUSICBRAINZ_ARTISTID: return "musicbrainz_artistid";
-        case MPD_TAG_MUSICBRAINZ_ALBUMID: return "musicbrainz_albumid";
-        case MPD_TAG_MUSICBRAINZ_ALBUMARTISTID: return "musicbrainz_albumartistid";
-        case MPD_TAG_MUSICBRAINZ_TRACKID: return "musicbrainz_trackid";
+        case MPD_TAG_MUSICBRAINZ_ARTISTID:       return "musicbrainz_artistid";
+        case MPD_TAG_MUSICBRAINZ_ALBUMID:        return "musicbrainz_albumid";
+        case MPD_TAG_MUSICBRAINZ_ALBUMARTISTID:  return "musicbrainz_albumartistid";
+        case MPD_TAG_MUSICBRAINZ_TRACKID:        return "musicbrainz_trackid";
         case MPD_TAG_MUSICBRAINZ_RELEASETRACKID: return "musicbrainz_releasetrackid";
-        case MPD_TAG_MUSICBRAINZ_WORKID: return "musicbrainz_workid";
+        case MPD_TAG_MUSICBRAINZ_WORKID:         return "musicbrainz_workid";
 
         default: return "";
     }
@@ -109,12 +153,12 @@ JsonNode * get_queue_songs(struct mpd_connection *conn, bool get_tags){
     return result;
 }
 
-char * queue(void) {
+char * queue(std::string mpd_host, unsigned mpd_port) {
     // Parameters
     const int N_SONGS = 7;
 
     // mpd connection setup
-    struct mpd_connection *conn = mpd_connection_new(NULL, 0, 30000);
+    struct mpd_connection *conn = mpd_connection_new(mpd_host.c_str(), mpd_port, 30000);
     if (mpd_connection_get_error(conn) != MPD_ERROR_SUCCESS)
         exit(handle_error(conn));
 
@@ -164,8 +208,6 @@ char * queue(void) {
     return data_str;
 }
 
-typedef websocketpp::server<websocketpp::config::asio> server;
-
 using websocketpp::lib::placeholders::_1;
 using websocketpp::lib::placeholders::_2;
 using websocketpp::lib::bind;
@@ -175,65 +217,51 @@ typedef server::message_ptr message_ptr;
 
 // Define a callback to handle incoming messages
 void on_message(server* s, websocketpp::connection_hdl hdl, message_ptr msg) {
-    std::cout << "received message '" << msg->get_payload() << "'" << std::endl;
-    std::cout << "with header '" << msg->get_header() << "'" << std::endl;
-
+    if (cfg.verbose){
+        std::cout << "received message '" << msg->get_payload() << "'" << std::endl;
+        std::cout << "with header '" << msg->get_header() << "'" << std::endl;
+    }
 
     if (msg->get_payload().rfind("queue", 0) == 0) {
         try {
-            s->send(hdl, queue(), msg->get_opcode());
+            s->send(hdl, queue(cfg.mpd_host, cfg.mpd_port), msg->get_opcode());
         } catch (websocketpp::exception const & e) {
             std::cout << "Echo failed because: " << "(" << e.what() << ")" << std::endl;
         }
         return;
-    } else if (msg->get_payload() == "stop-listening" || msg->get_payload() == "stop") {
-        s->stop_listening();
-        return;
     }
 }
 
-server ws;
+int main(int argc, const char** argv) {
 
-void handler_close(int s){
-    ws.stop_listening();
-    exit(1); 
-}
+    cfg = parse_args(argc, argv);
 
-
-int main() {
     // Create a server endpoint
-    //
-    struct sigaction sigIntHandler;
-
-    sigIntHandler.sa_handler = handler_close;
-    sigemptyset(&sigIntHandler.sa_mask);
-    sigIntHandler.sa_flags = 0;
-
-    sigaction(SIGINT, &sigIntHandler, NULL);
+    websocketpp::server<websocketpp::config::asio>ws;
 
     try {
         // Set logging settings
-        // ws.set_access_channels(websocketpp::log::alevel::all);
-        // ws.clear_access_channels(websocketpp::log::alevel::frame_payload);
-
-        // Initialize Asio
+        if (cfg.verbose){
+            ws.set_access_channels(websocketpp::log::alevel::all);
+            ws.clear_access_channels(websocketpp::log::alevel::frame_payload);
+        } else {
+            ws.clear_access_channels(websocketpp::log::alevel::all);
+            ws.clear_error_channels(websocketpp::log::elevel::all);
+        }
         ws.init_asio();
-
-        // Register our message handler
+        ws.set_reuse_addr(true);
         ws.set_message_handler(bind(&on_message,&ws,::_1,::_2));
-
-        // Listen on port 9000
-        ws.listen(8000);
-
-        // Start the server accept loop
+        ws.listen(cfg.port);
         ws.start_accept();
-
-        // Start the ASIO io_service run loop
         ws.run();
     } catch (websocketpp::exception const & e) {
-        std::cout << e.what() << std::endl;
-    } catch (...) {
-        std::cout << "other exception" << std::endl;
+        std::cerr << e.what() << std::endl;
+        ws.stop_listening();
+        return 1;
+    } catch (const std::exception &e) {
+        std::cerr << e.what() << std::endl;
+        ws.stop_listening();
+        return 1;
     }
     return 0;
 }

@@ -1,5 +1,5 @@
 {
-  description = "MPD queue api";
+  description = "MPD websocket api";
 
   inputs = {
     nixpkgs.url = "github:nixos/nixpkgs/nixpkgs-unstable";
@@ -8,31 +8,31 @@
 
   outputs = { self, nixpkgs, utils, ... }@inputs:
     let
-      version = "0.1.0";
-      pkg = { lib, stdenv, cmake, asio_1_10, libmpdclient, websocketpp, pkg-config }: with lib; stdenv.mkDerivation rec {
-        inherit version;
-        pname = "mpdqueueapi";
-        src = ./.;
-        enableParallelBuilding = true;
-        buildInputs = [ asio_1_10 libmpdclient websocketpp ];
-        nativeBuildInputs = [ pkg-config cmake ];
-      
-        installPhase = ''
-          mkdir -p $out/bin                                                                             
-          chmod +x ./mpdqueueapi
-          cp ./mpdqueueapi $out/bin
-        '';
-      
-        meta = {
-          description = "MPD queue api";
-          license     = licenses.mit;
-          platforms   = platforms.all;
+      pkg = { asio_1_10, cmake, docopt_cpp, lib, libmpdclient, pkg-config, stdenv, websocketpp }:
+        with lib; stdenv.mkDerivation rec {
+          pname = "mpdws";
+          version = "0.2.0";
+          src = ./.;
+          enableParallelBuilding = true;
+          buildInputs = [ asio_1_10 libmpdclient websocketpp docopt_cpp ];
+          nativeBuildInputs = [ pkg-config cmake ];
+       
+          installPhase = ''
+            mkdir -p $out/bin
+            chmod +x ./mpdws
+            cp ./mpdws $out/bin
+          '';
+       
+          meta = {
+            description = "MPD websocket api";
+            license     = licenses.mit;
+            platforms   = platforms.all;
+          };
         };
-      };
     in
     {
       overlay = final: prev: rec {
-        mpdqueueapi = final.callPackage pkg {};
+        mpdws = final.callPackage pkg {};
       };
     } // utils.lib.eachDefaultSystem (system:
       let
@@ -40,27 +40,51 @@
       in
       rec {
         packages = {
-          mpdqueueapi = pkgs.mpdqueueapi;
+          mpdws = pkgs.mpdws;
         };
 
-        defaultPackage = packages.mpdqueueapi;
+        defaultPackage = packages.mpdws;
+
+        nixosModule = { config, lib, pkgs, ... }: let
+          cfg = config.services.mpdws;
+        in {
+          options.services.mpdws = with lib; {
+            enable = mkEnableOption "Enable mpdws, the mpd websocket api.";
+            listenAddr = mkOption  {
+                type = types.str;
+                default = "127.0.0.1";
+                description = "Listen address.";
+            };
+            port = mkOption {
+                type = types.port;
+                default = 9001;
+                description = "Listen port.";
+            };
+            mpdHost = mkOption {
+              type = types.str;
+              default = "";
+              description = "MPD host.";
+            };
+          };
+          config = lib.mkIf cfg.enable ; 
+        };
 
         apps = {
-          mpdqueueapi = {
+          mpdws = {
             type = "app";
-            program = "${packages.mpdqueueapi}/bin/mpdqueueapi";
+            program = "${packages.mpdws}/bin/mpdws";
           };
         };
 
-        defaultApp = apps.mpdqueueapi;
+        defaultApp = apps.mpdws;
 
         devShell = pkgs.mkShell {
           nativeBuildInputs = with pkgs; [
+            docopt_cpp
             pkg-config
             asio_1_10
             websocketpp
             libmpdclient
-            mpdqueueapi
             jq
             fx
           ];
