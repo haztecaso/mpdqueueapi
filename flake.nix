@@ -24,7 +24,7 @@
           '';
        
           meta = {
-            description = "MPD websocket api";
+            description = "MPD WebSocket API";
             license     = licenses.mit;
             platforms   = platforms.all;
           };
@@ -49,8 +49,8 @@
           cfg = config.services.mpdws;
         in {
           options.services.mpdws = with lib; {
-            enable = mkEnableOption "Enable mpdws, the mpd websocket api.";
-            listenAddr = mkOption  {
+            enable = mkEnableOption "Enable mpdws, the MPD WebSocket API.";
+            host = mkOption  {
                 type = types.str;
                 default = "127.0.0.1";
                 description = "Listen address.";
@@ -62,11 +62,26 @@
             };
             mpdHost = mkOption {
               type = types.str;
-              default = "";
+              default = "127.0.0.1";
+              description = "MPD host.";
+            };
+            mpdPort = mkOption {
+              type = types.port;
+              default = 6600;
               description = "MPD host.";
             };
           };
-          config = lib.mkIf cfg.enable ; 
+          config = lib.mkIf cfg.enable {
+            systemd.services.mpdws = {
+              after = [ "network.target" ];
+              description = "MPD WebSocket API";
+              wantedBy = "multi-user.target";
+              serviceConfig = {
+                ExecStart = "${pkgs.mpdws}/bin/mpdws --host=${cfg.host} --port=${toString cfg.port} --mpd-host=${cfg.mpdHost} --mpd-port=${cfg.mpdPort}";
+                Restart = "always";
+              };
+            };
+          }; 
         };
 
         apps = {
